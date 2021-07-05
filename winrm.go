@@ -253,7 +253,8 @@ func (w *WinRMClient) receive(shellId, commandId string) (string, int, error) {
 			return "", 0, err
 		}
 		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
-		exitCode, isComplete, err := ParseOutput(body, stdout, stderr)
+		exitCode, isComplete, err := CaptureStreams(body, stdout, stderr)
+		body.Close()
 		if err != nil {
 			return "", 0, err
 		}
@@ -262,7 +263,10 @@ func (w *WinRMClient) receive(shellId, commandId string) (string, int, error) {
 			if exitCode == "0" {
 				output = stdout.String()
 			} else {
-				output = stderr.String()
+				output, err = CaptureErrorMessages(stderr.String())
+				if err != nil {
+					return "", 0, err
+				}
 			}
 			eCode, err := strconv.Atoi(exitCode)
 			if err != nil {
@@ -325,7 +329,7 @@ func CaptureAttribute(body io.Reader, tag, attr string) (string, error) {
 	return "", nil
 }
 
-func ParseOutput(body io.Reader, stdout, stderr io.Writer) (string, bool, error) {
+func CaptureStreams(body io.Reader, stdout, stderr io.Writer) (string, bool, error) {
 	decoder := xml.NewDecoder(body)
 	var comp, exitCode string
 	var isComplete bool
@@ -412,4 +416,41 @@ func CaptureText(body io.Reader, tag string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+func CaptureErrorMessages(errorMessage string) (string, error) {
+	index := strings.Index(errorMessage, "<Objs")
+	if index == -1 {
+		return errorMessage, nil
+	}
+	errorMessage = errorMessage[index:]
+	decoder := xml.NewDecoder(strings.NewReader(errorMessage))
+	builder := strings.Builder{}
+	for {
+		token, err := decoder.Token()
+		if err != nil {
+			if err == io.EOF {
+				return builder.String(), nil
+			}
+			return "", err
+		}
+		isError := false
+		switch v := token.(type) {
+		case xml.StartElement:
+			if v.Name.Local == "S" {
+				for _, a := range v.Attr {
+					if a.Name.Local == "S" && a.Value == "Error" {
+						isError = true
+						break
+					}
+				}
+			}
+		case xml.CharData:
+			if isError {
+				builder.WriteString(strings.TrimSuffix(string(v), "_x000D__x000A_"))
+				builder.WriteString("\n")
+				isError = false
+			}
+		}
+	}
 }
