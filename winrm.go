@@ -232,9 +232,8 @@ func (w *WinRMClient) executeCommand(shellId, command string) (string, error) {
 
 // Read - Reads the output and error streams of the command with given id
 // to completion
+// TODO: Add timeout to this.
 func (w *WinRMClient) recieve(shellId, commandId string) (string, int, error) {
-	var cResp string
-	var exitCode int
 	for {
 		p := &PayloadBuilder{
 			Url:              w.url,
@@ -254,32 +253,25 @@ func (w *WinRMClient) recieve(shellId, commandId string) (string, int, error) {
 		if err != nil {
 			return "", 0, err
 		}
-		resp, err := CaptureText(body, "Stream")
+		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
+		exitCode, isComplete, err := ParseOutput(body, stdout, stderr)
 		if err != nil {
-			body.Close()
 			return "", 0, err
 		}
-		cResp += resp
-		state, err := CaptureAttribute(body, "CommandState", "State")
-		if err != nil {
-			body.Close()
-			return "", 0, err
-		}
-		if state == "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/CommandState/Done" {
-			code, err := CaptureText(body, "ExitCode")
-			body.Close()
+		if isComplete {
+			output := ""
+			if exitCode == "0" {
+				output = stdout.String()
+			} else {
+				output = stderr.String()
+			}
+			eCode, err := strconv.Atoi(exitCode)
 			if err != nil {
 				return "", 0, err
 			}
-			exitCode, err = strconv.Atoi(code)
-			if err != nil {
-				return "", 0, err
-			}
-			break
+			return output, eCode, nil
 		}
 	}
-
-	return cResp, exitCode, nil
 }
 
 // Input - Sends the input to the given command
@@ -332,6 +324,74 @@ func CaptureAttribute(body io.Reader, tag, attr string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+func ParseOutput(body io.Reader, stdout, stderr io.Writer) (string, bool, error) {
+	decoder := xml.NewDecoder(body)
+	var comp, exitCode string
+	var isComplete bool
+	var count int
+	for {
+		if count == 4 {
+			return exitCode, isComplete, nil
+		}
+		token, err := decoder.Token()
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return "", false, err
+		}
+		switch d := token.(type) {
+		case xml.StartElement:
+			if d.Name.Local == "Stream" {
+				for _, a := range d.Attr {
+					if a.Name.Local == "Name" {
+						if a.Value == "stdout" {
+							comp = "stdout"
+						} else if a.Value == "stderr" {
+							comp = "stderr"
+						}
+					}
+				}
+			} else if d.Name.Local == "CommandState" {
+				for _, a := range d.Attr {
+					if a.Name.Local == "State" && a.Value == "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/CommandState/Done" {
+						isComplete = true
+					}
+				}
+				count++
+			} else if d.Name.Local == "ExitCode" {
+				comp = "code"
+			}
+		case xml.CharData:
+			switch comp {
+			case "stdout":
+				writeBase64Decode(d, stdout)
+				count++
+			case "stderr":
+				writeBase64Decode(d, stderr)
+				count++
+			case "code":
+				exitCode = strings.TrimSpace(string(d))
+				count++
+			}
+			comp = ""
+		}
+	}
+}
+
+// Decode content into base64 and writes to writer
+func writeBase64Decode(b []byte, writer io.Writer) error {
+	content, err := base64.StdEncoding.DecodeString(string(b))
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(content)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func CaptureText(body io.Reader, tag string) (string, error) {
