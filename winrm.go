@@ -314,6 +314,9 @@ func CaptureAttribute(body io.Reader, tag, attr string) (string, error) {
 	for {
 		token, err := decoder.Token()
 		if err != nil {
+			if err == io.EOF {
+				break
+			}
 			return "", err
 		}
 		switch d := token.(type) {
@@ -337,6 +340,9 @@ func CaptureText(body io.Reader, tag string) (string, error) {
 	for {
 		token, err := decoder.Token()
 		if err != nil {
+			if err == io.EOF {
+				break
+			}
 			return "", err
 		}
 		switch d := token.(type) {
