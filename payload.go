@@ -22,7 +22,7 @@ const (
 	Create = 1 << iota
 	Execute
 	Send
-	Recieve
+	Receive
 	Delete
 )
 
@@ -41,18 +41,18 @@ type PayloadBuilder struct {
 	OpType           RequestType
 }
 
-func (p *PayloadBuilder) GetOpType() string {
+func (p *PayloadBuilder) GetAction() string {
 	switch p.OpType {
 	case Create:
-		return "Create"
+		return "http://schemas.xmlsoap.org/ws/2004/09/transfer/Create"
 	case Execute:
-		return "Command"
+		return "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/Command"
 	case Send:
-		return "Send"
-	case Recieve:
-		return "Recieve"
+		return "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/Send"
+	case Receive:
+		return "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/Receive"
 	case Delete:
-		return "Delete"
+		return "http://schemas.xmlsoap.org/ws/2004/09/transfer/Delete"
 	default:
 		return ""
 	}
@@ -81,7 +81,7 @@ func (p *PayloadBuilder) GenerateSelectorSet() string {
 	if p.OpType != Create {
 		return fmt.Sprintf(`
     <wsman:SelectorSet xmlns:wsman="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd" xmlns="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd">
-      <wsman:Selector Name="ShellId">uuid:%s</wsman:Selector>
+      <wsman:Selector Name="ShellId">%s</wsman:Selector>
     </wsman:SelectorSet>
     `, p.ShellId)
 	}
@@ -113,7 +113,7 @@ func (p *PayloadBuilder) GenerateBody() string {
         <rsp:Stream xmlns:rsp="http://schemas.microsoft.com/wbem/wsman/1/windows/shell" Name="stdin" CommandId="%s">%s</rsp:Stream>
       </rsp:Send>
     </s:Body>`, p.CommandId, p.Input)
-	case Recieve:
+	case Receive:
 		return fmt.Sprintf(`
     <s:Body>
       <rsp:Receive xmlns:rsp="http://schemas.microsoft.com/wbem/wsman/1/windows/shell">
@@ -145,7 +145,7 @@ var body = `
     <wsa:Address s:mustUnderstand="true">http://schemas.xmlsoap.org/ws/2004/08/addressing/role/anonymous</wsa:Address>
   </wsa:ReplyTo>
   <wsman:ResourceURI xmlns:wsman="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd">http://schemas.microsoft.com/wbem/wsman/1/windows/shell/cmd</wsman:ResourceURI>
-  <wsa:Action s:mustUnderstand="true">http://schemas.xmlsoap.org/ws/2004/09/transfer/{{.GetOpType}}</wsa:Action>
+  <wsa:Action s:mustUnderstand="true">{{.GetAction}}</wsa:Action>
   <wsman:MaxEnvelopeSize s:mustUnderstand="true">{{.MaxEnvelopeSize}}</wsman:MaxEnvelopeSize>
   <wsa:MessageID>uuid:{{.MessageId}}</wsa:MessageID>
   <wsman:Locale xml:lang="{{.Locale}}" s:mustUnderstand="false"/>

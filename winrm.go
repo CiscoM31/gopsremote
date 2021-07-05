@@ -119,22 +119,25 @@ func (w *WinRMClient) validate() error {
 }
 
 // ExecuteCommand - Executes the command on the target
-func (w *WinRMClient) ExecuteCommand(cmd string) (string, error) {
+func (w *WinRMClient) ExecuteCommand(cmd string) (string, int, error) {
 	err := w.validate()
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	shellId, err := w.openShell()
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	// TODO: Pass the proper command after base64 encoding it
-	resp, err := w.executeCommand(shellId, encodeCmd(cmd))
+	commandId, err := w.executeCommand(shellId, encodeCmd(cmd))
 	defer w.closeShell(shellId)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
-	return resp, nil
+	resp, exitCode, err := w.receive(shellId, commandId)
+	if err != nil {
+		return "", 0, err
+	}
+	return strings.TrimSpace(resp), exitCode, err
 }
 
 func encodeCmd(cmd string) string {
@@ -193,11 +196,7 @@ func (w *WinRMClient) openShell() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	arr := strings.Split(text, ":")
-	if len(arr) != 2 {
-		return "", errors.New("invalid response")
-	}
-	return arr[1], nil
+	return text, nil
 }
 
 // ExecuteCommand - Executes the given script on the target machine
@@ -233,14 +232,14 @@ func (w *WinRMClient) executeCommand(shellId, command string) (string, error) {
 // Read - Reads the output and error streams of the command with given id
 // to completion
 // TODO: Add timeout to this.
-func (w *WinRMClient) recieve(shellId, commandId string) (string, int, error) {
+func (w *WinRMClient) receive(shellId, commandId string) (string, int, error) {
 	for {
 		p := &PayloadBuilder{
 			Url:              w.url,
 			OperationTimeout: w.operationTimeout,
 			Locale:           w.locale,
 			MaxEnvelopeSize:  w.maxEnvelopeSize,
-			OpType:           Recieve,
+			OpType:           Receive,
 			MessageId:        uuid.NewString(),
 			ShellId:          shellId,
 			CommandId:        commandId,
@@ -330,9 +329,8 @@ func ParseOutput(body io.Reader, stdout, stderr io.Writer) (string, bool, error)
 	decoder := xml.NewDecoder(body)
 	var comp, exitCode string
 	var isComplete bool
-	var count int
 	for {
-		if count == 4 {
+		if exitCode != "" {
 			return exitCode, isComplete, nil
 		}
 		token, err := decoder.Token()
@@ -360,7 +358,6 @@ func ParseOutput(body io.Reader, stdout, stderr io.Writer) (string, bool, error)
 						isComplete = true
 					}
 				}
-				count++
 			} else if d.Name.Local == "ExitCode" {
 				comp = "code"
 			}
@@ -368,17 +365,15 @@ func ParseOutput(body io.Reader, stdout, stderr io.Writer) (string, bool, error)
 			switch comp {
 			case "stdout":
 				writeBase64Decode(d, stdout)
-				count++
 			case "stderr":
 				writeBase64Decode(d, stderr)
-				count++
 			case "code":
 				exitCode = strings.TrimSpace(string(d))
-				count++
 			}
 			comp = ""
 		}
 	}
+	return "", false, nil
 }
 
 // Decode content into base64 and writes to writer
