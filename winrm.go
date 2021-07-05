@@ -3,6 +3,7 @@ package gopsremote
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/base64"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -128,12 +129,21 @@ func (w *WinRMClient) ExecuteCommand(cmd string) (string, error) {
 		return "", err
 	}
 	// TODO: Pass the proper command after base64 encoding it
-	resp, err := w.executeCommand(shellId, cmd)
+	resp, err := w.executeCommand(shellId, encodeCmd(cmd))
 	defer w.closeShell(shellId)
 	if err != nil {
 		return "", err
 	}
 	return resp, nil
+}
+
+func encodeCmd(cmd string) string {
+	newCmd := strings.Builder{}
+	for _, b := range []byte(cmd) {
+		newCmd.WriteString(string(b) + "\x00")
+	}
+	encodedCmd := base64.StdEncoding.EncodeToString([]byte(newCmd.String()))
+	return "powershell.exe -EncodedCommand " + encodedCmd
 }
 
 // sendRequest - sends a WinRM request to the provided url and SOAP payload
