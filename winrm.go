@@ -426,6 +426,7 @@ func CaptureErrorMessages(errorMessage string) (string, error) {
 	errorMessage = errorMessage[index:]
 	decoder := xml.NewDecoder(strings.NewReader(errorMessage))
 	builder := strings.Builder{}
+	isError := false
 	for {
 		token, err := decoder.Token()
 		if err != nil {
@@ -434,7 +435,6 @@ func CaptureErrorMessages(errorMessage string) (string, error) {
 			}
 			return "", err
 		}
-		isError := false
 		switch v := token.(type) {
 		case xml.StartElement:
 			if v.Name.Local == "S" {
