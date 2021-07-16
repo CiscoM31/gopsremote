@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -53,7 +54,7 @@ type WinRMClient struct {
 }
 
 // Creates a new WinRM client
-func NewWinRMClient(ipAddress, username, password, maxEnvelopeSize, locale, operationTimeout string, port int, auth Authentication) *WinRMClient {
+func NewWinRMClient(ipAddress, username, password, maxEnvelopeSize, locale, operationTimeout string, port int, auth Authentication, proxy func(*http.Request) (*url.URL, error)) *WinRMClient {
 	// TODO: Add validations for each of the arguments
 	client := &WinRMClient{
 		ipAddress:        ipAddress,
@@ -67,7 +68,7 @@ func NewWinRMClient(ipAddress, username, password, maxEnvelopeSize, locale, oper
 		url:              fmt.Sprintf("https://%s:%d/wsman", ipAddress, port),
 		client: &http.Client{
 			Transport: &http.Transport{
-				Proxy: http.ProxyFromEnvironment,
+				Proxy: proxy,
 				DialContext: (&net.Dialer{
 					Timeout:   30 * time.Second,
 					KeepAlive: 30 * time.Second,
