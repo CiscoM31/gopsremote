@@ -26,6 +26,16 @@ const (
 	Kerberos
 )
 
+type WinRMClientIf interface {
+	openShell() (string, error)
+	sendRequest(body *bytes.Buffer) (io.ReadCloser, error)
+	execute(shellId, command string) (string, error)
+	ExecuteCommand(cmd string) (string, int, error)
+	receive(shellId, commandId string) (string, int, error)
+	closeShell(shellId string) error
+	validate() error
+}
+
 // WinRM client used for executing scripts
 // TODO: Add support for NTLM and Kerberos, Only basic is supported for now
 // TODO: Add support for certificate verification while initiating connections
@@ -136,6 +146,7 @@ func NewWinRMClient(details getTargetDetails, options ...winrmSettingsOption) *W
 		},
 	}
 	client.targetDetails = details()
+	client.url = fmt.Sprintf("https://%s:%d/wsman", client.ipAddress, client.port)
 	client.winrmSettings = defaultWinrmSettings
 	for _, o := range options {
 		client.winrmSettings = o(client.winrmSettings)
@@ -182,7 +193,7 @@ func (w *WinRMClient) ExecuteCommand(cmd string) (string, int, error) {
 	if err != nil {
 		return "", 0, err
 	}
-	commandId, err := w.executeCommand(shellId, encodeCmd(cmd))
+	commandId, err := w.execute(shellId, encodeCmd(cmd))
 	defer w.closeShell(shellId)
 	if err != nil {
 		return "", 0, err
@@ -253,10 +264,10 @@ func (w *WinRMClient) openShell() (string, error) {
 	return text, nil
 }
 
-// ExecuteCommand - Executes the given script on the target machine
+// execute - Executes the given script on the target machine
 // Returns the command id of the newly created command
 // TODO: base64 encode the command
-func (w *WinRMClient) executeCommand(shellId, command string) (string, error) {
+func (w *WinRMClient) execute(shellId, command string) (string, error) {
 	p := &PayloadBuilder{
 		Url:              w.url,
 		OperationTimeout: w.operationTimeout,
@@ -329,11 +340,6 @@ func (w *WinRMClient) receive(shellId, commandId string) (string, int, error) {
 			return output, eCode, nil
 		}
 	}
-}
-
-// Input - Sends the input to the given command
-func (w *WinRMClient) input() error {
-	return nil
 }
 
 // CloseShell - Closes the shell with the given id
