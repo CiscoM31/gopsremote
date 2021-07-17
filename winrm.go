@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/tls"
 	"encoding/base64"
-	"encoding/xml"
 	"errors"
 	"fmt"
 	"io"
@@ -33,6 +32,43 @@ const (
 type WinRMClient struct {
 	// Target WSMAN url
 	url string
+	// Target Details
+	targetDetails
+	// HTTP Client for sending requests/responses
+	client *http.Client
+	// Settings to be applied to the winrm session
+	winrmSettings
+}
+
+// winrmSettings holds the set of configurable properties
+// required to set up a winrm session
+type winrmSettings struct {
+	// Port no of the HTTPS winrm listeners
+	port int
+	// Maximum envelope size of the WinRM messages
+	maxEnvelopeSize string
+	// Locale of the windows machine
+	locale string
+	// operationTimeout of the WinRM operation
+	operationTimeout string
+}
+
+type getTargetDetails func() targetDetails
+
+func Credentials(ipAddress, username, password string, auth Authentication, proxy func(*http.Request) (*url.URL, error)) getTargetDetails {
+	return func() targetDetails {
+		return targetDetails{
+			ipAddress: ipAddress,
+			username:  username,
+			password:  password,
+			auth:      auth,
+			proxy:     proxy,
+		}
+	}
+}
+
+// targetDetails holds the target windows machine credentials.
+type targetDetails struct {
 	// Ip address/FQDN of the target windows machine
 	ipAddress string
 	// Username for authentication
@@ -42,33 +78,46 @@ type WinRMClient struct {
 	// Authentication mechanism to be used
 	// Currently only basic authentication is supported
 	auth Authentication
-	// HTTP Client for sending requests/responses
-	client *http.Client
-	// Maximum envelope size of the WinRM messages
-	maxEnvelopeSize string
-	// Locale of the windows machine
-	locale           string
-	operationTimeout string
-	// port no of the WinRM listeners
-	port int
+	// Proxy function
+	proxy func(*http.Request) (*url.URL, error)
+}
+
+type winrmSettingsOption func(winrmSettings) winrmSettings
+
+func Port(num int) winrmSettingsOption {
+	return func(ws winrmSettings) winrmSettings {
+		ws.port = num
+		return ws
+	}
+}
+
+func MaxEnvelopeSize(size string) winrmSettingsOption {
+	return func(ws winrmSettings) winrmSettings {
+		ws.maxEnvelopeSize = size
+		return ws
+	}
+}
+
+func Locale(locale string) winrmSettingsOption {
+	return func(ws winrmSettings) winrmSettings {
+		ws.locale = locale
+		return ws
+	}
+}
+
+var defaultWinrmSettings winrmSettings = winrmSettings{
+	port:             5896,
+	maxEnvelopeSize:  "153200",
+	locale:           "en-US",
+	operationTimeout: "PT-06",
 }
 
 // Creates a new WinRM client
-func NewWinRMClient(ipAddress, username, password, maxEnvelopeSize, locale, operationTimeout string, port int, auth Authentication, proxy func(*http.Request) (*url.URL, error)) *WinRMClient {
+func NewWinRMClient(details getTargetDetails, options ...winrmSettingsOption) *WinRMClient {
 	// TODO: Add validations for each of the arguments
 	client := &WinRMClient{
-		ipAddress:        ipAddress,
-		username:         username,
-		password:         password,
-		auth:             auth,
-		maxEnvelopeSize:  maxEnvelopeSize,
-		locale:           locale,
-		operationTimeout: operationTimeout,
-		port:             port,
-		url:              fmt.Sprintf("https://%s:%d/wsman", ipAddress, port),
 		client: &http.Client{
 			Transport: &http.Transport{
-				Proxy: proxy,
 				DialContext: (&net.Dialer{
 					Timeout:   30 * time.Second,
 					KeepAlive: 30 * time.Second,
@@ -86,7 +135,11 @@ func NewWinRMClient(ipAddress, username, password, maxEnvelopeSize, locale, oper
 			},
 		},
 	}
-
+	client.targetDetails = details()
+	client.winrmSettings = defaultWinrmSettings
+	for _, o := range options {
+		client.winrmSettings = o(client.winrmSettings)
+	}
 	return client
 }
 
@@ -303,155 +356,4 @@ func (w *WinRMClient) closeShell(shellId string) error {
 		return err
 	}
 	return nil
-}
-
-func CaptureAttribute(body io.Reader, tag, attr string) (string, error) {
-	decoder := xml.NewDecoder(body)
-	for {
-		token, err := decoder.Token()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return "", err
-		}
-		switch d := token.(type) {
-		case xml.StartElement:
-			if d.Name.Local == tag {
-				for _, a := range d.Attr {
-					if a.Name.Local == attr {
-						return a.Value, nil
-					}
-				}
-			}
-
-		}
-	}
-	return "", nil
-}
-
-func CaptureStreams(body io.Reader, stdout, stderr io.Writer) (string, bool, error) {
-	decoder := xml.NewDecoder(body)
-	var comp, exitCode string
-	var isComplete bool
-	for {
-		if exitCode != "" {
-			return exitCode, isComplete, nil
-		}
-		token, err := decoder.Token()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return "", false, err
-		}
-		switch d := token.(type) {
-		case xml.StartElement:
-			if d.Name.Local == "Stream" {
-				for _, a := range d.Attr {
-					if a.Name.Local == "Name" {
-						if a.Value == "stdout" {
-							comp = "stdout"
-						} else if a.Value == "stderr" {
-							comp = "stderr"
-						}
-					}
-				}
-			} else if d.Name.Local == "CommandState" {
-				for _, a := range d.Attr {
-					if a.Name.Local == "State" && a.Value == "http://schemas.microsoft.com/wbem/wsman/1/windows/shell/CommandState/Done" {
-						isComplete = true
-					}
-				}
-			} else if d.Name.Local == "ExitCode" {
-				comp = "code"
-			}
-		case xml.CharData:
-			switch comp {
-			case "stdout":
-				writeBase64Decode(d, stdout)
-			case "stderr":
-				writeBase64Decode(d, stderr)
-			case "code":
-				exitCode = strings.TrimSpace(string(d))
-			}
-			comp = ""
-		}
-	}
-	return "", false, nil
-}
-
-// Decode content into base64 and writes to writer
-func writeBase64Decode(b []byte, writer io.Writer) error {
-	content, err := base64.StdEncoding.DecodeString(string(b))
-	if err != nil {
-		return err
-	}
-	_, err = writer.Write(content)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func CaptureText(body io.Reader, tag string) (string, error) {
-	decoder := xml.NewDecoder(body)
-	found := false
-	for {
-		token, err := decoder.Token()
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return "", err
-		}
-		switch d := token.(type) {
-		case xml.StartElement:
-			if d.Name.Local == tag {
-				found = true
-			}
-		case xml.CharData:
-			if found {
-				return strings.TrimSpace(string(d)), nil
-			}
-		}
-	}
-	return "", nil
-}
-
-func CaptureErrorMessages(errorMessage string) (string, error) {
-	index := strings.Index(errorMessage, "<Objs")
-	if index == -1 {
-		return errorMessage, nil
-	}
-	errorMessage = errorMessage[index:]
-	decoder := xml.NewDecoder(strings.NewReader(errorMessage))
-	builder := strings.Builder{}
-	isError := false
-	for {
-		token, err := decoder.Token()
-		if err != nil {
-			if err == io.EOF {
-				return builder.String(), nil
-			}
-			return "", err
-		}
-		switch v := token.(type) {
-		case xml.StartElement:
-			if v.Name.Local == "S" {
-				for _, a := range v.Attr {
-					if a.Name.Local == "S" && a.Value == "Error" {
-						isError = true
-						break
-					}
-				}
-			}
-		case xml.CharData:
-			if isError {
-				builder.WriteString(strings.TrimSuffix(string(v), "_x000D__x000A_"))
-				builder.WriteString("\n")
-				isError = false
-			}
-		}
-	}
 }
