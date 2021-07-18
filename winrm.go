@@ -44,7 +44,7 @@ type WinRMClient struct {
 	// Target WSMAN url
 	url string
 	// Target Details
-	targetDetails
+	endpointDetails
 	// HTTP Client for sending requests/responses
 	client *http.Client
 	// Settings to be applied to the winrm session
@@ -64,11 +64,11 @@ type winrmSettings struct {
 	operationTimeout string
 }
 
-type getTargetDetails func() targetDetails
+type getEndpointDetails func() endpointDetails
 
-func Credentials(ipAddress, username, password string, auth Authentication, proxy func(*http.Request) (*url.URL, error)) getTargetDetails {
-	return func() targetDetails {
-		return targetDetails{
+func Endpoint(ipAddress, username, password string, auth Authentication, proxy func(*http.Request) (*url.URL, error)) getEndpointDetails {
+	return func() endpointDetails {
+		return endpointDetails{
 			ipAddress: ipAddress,
 			username:  username,
 			password:  password,
@@ -78,8 +78,8 @@ func Credentials(ipAddress, username, password string, auth Authentication, prox
 	}
 }
 
-// targetDetails holds the target windows machine credentials.
-type targetDetails struct {
+// endpointDetails holds the target windows machine credentials.
+type endpointDetails struct {
 	// Ip address/FQDN of the target windows machine
 	ipAddress string
 	// Username for authentication
@@ -124,7 +124,7 @@ var defaultWinrmSettings winrmSettings = winrmSettings{
 }
 
 // Creates a new WinRM client
-func NewWinRMClient(details getTargetDetails, options ...winrmSettingsOption) *WinRMClient {
+func NewWinRMClient(details getEndpointDetails, options ...winrmSettingsOption) *WinRMClient {
 	// TODO: Add validations for each of the arguments
 	client := &WinRMClient{
 		client: &http.Client{
@@ -146,7 +146,7 @@ func NewWinRMClient(details getTargetDetails, options ...winrmSettingsOption) *W
 			},
 		},
 	}
-	client.targetDetails = details()
+	client.endpointDetails = details()
 	client.url = fmt.Sprintf("https://%s:%d/wsman", client.ipAddress, client.port)
 	client.winrmSettings = defaultWinrmSettings
 	for _, o := range options {
