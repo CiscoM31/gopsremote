@@ -194,16 +194,35 @@ func (w *WinRMClient) ExecuteCommand(cmd string) (string, int, error) {
 	if err != nil {
 		return "", 0, err
 	}
-	commandId, err := w.execute(shellId, encodeCmd(cmd))
 	defer w.closeShell(shellId)
-	if err != nil {
-		return "", 0, err
+	eCmd := encodeCmd(cmd)
+	if len(eCmd) < 8000 {
+		commandId, err := w.execute(shellId, "powershell.exe -EncodedCommand "+eCmd)
+		if err != nil {
+			return "", 0, err
+		}
+		resp, exitCode, err := w.receive(shellId, commandId)
+		if err != nil {
+			return "", 0, err
+		}
+		return strings.TrimSpace(resp), exitCode, err
+	} else {
+		tempFile := "$env:TEMP\\" + uuid.NewString() + ".ps1"
+		err = w.copyToFile(cmd, tempFile)
+		if err != nil {
+			return "", 0, err
+		}
+		commandId, err := w.execute(shellId, "powershell.exe -File "+eCmd)
+		if err != nil {
+			return "", 0, err
+		}
+		resp, exitCode, err := w.receive(shellId, commandId)
+		if err != nil {
+			return "", 0, err
+		}
+		return strings.TrimSpace(resp), exitCode, err
 	}
-	resp, exitCode, err := w.receive(shellId, commandId)
-	if err != nil {
-		return "", 0, err
-	}
-	return strings.TrimSpace(resp), exitCode, err
+
 }
 
 func encodeCmd(cmd string) string {
@@ -211,8 +230,38 @@ func encodeCmd(cmd string) string {
 	for _, b := range []byte(cmd) {
 		newCmd.WriteString(string(b) + "\x00")
 	}
-	encodedCmd := base64.StdEncoding.EncodeToString([]byte(newCmd.String()))
-	return "powershell.exe -EncodedCommand " + encodedCmd
+	return base64.StdEncoding.EncodeToString([]byte(newCmd.String()))
+}
+
+// copyToFile copies the script to the given filename
+// filename should be that absolute path of the target file
+func (w *WinRMClient) copyToFile(script string, filename string) error {
+	// Creating the file
+	resp, exitCode, err := w.ExecuteCommand(fmt.Sprintf("New-Item -Path '%s' -ItemType File", filename))
+	if err != nil {
+		return err
+	}
+	if exitCode != 0 {
+		return fmt.Errorf("copying script to file failed with exit code %d and response %s", exitCode, resp)
+	}
+	// TODO: Find adequate chunk size later
+	chunkSize := 10
+	i := 0
+	for i < len(script) {
+		if i+chunkSize < len(script) {
+			resp, exitCode, err = w.ExecuteCommand(fmt.Sprintf("echo %s >> %s", script[i:chunkSize+i+1], filename))
+		} else {
+			resp, exitCode, err = w.ExecuteCommand(fmt.Sprintf("echo %s >> %s", script[i:], filename))
+		}
+		if err != nil {
+			return err
+		}
+		if exitCode != 0 {
+			return fmt.Errorf("copying script to file failed with exit code %d and response %s", exitCode, resp)
+		}
+		i += chunkSize
+	}
+	return nil
 }
 
 // sendRequest - sends a WinRM request to the provided url and SOAP payload
