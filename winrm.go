@@ -117,7 +117,7 @@ func Locale(locale string) winrmSettingsOption {
 }
 
 var defaultWinrmSettings winrmSettings = winrmSettings{
-	port:             5896,
+	port:             5986,
 	maxEnvelopeSize:  "153200",
 	locale:           "en-US",
 	operationTimeout: "PT60.000S",
