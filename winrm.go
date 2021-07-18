@@ -31,6 +31,7 @@ type WinRMClientIf interface {
 	sendRequest(body *bytes.Buffer) (io.ReadCloser, error)
 	execute(shellId, command string) (string, error)
 	ExecuteCommand(cmd string) (string, int, error)
+	input(shellId, commandId string) error
 	receive(shellId, commandId string) (string, int, error)
 	closeShell(shellId string) error
 	validate() error
@@ -119,7 +120,7 @@ var defaultWinrmSettings winrmSettings = winrmSettings{
 	port:             5896,
 	maxEnvelopeSize:  "153200",
 	locale:           "en-US",
-	operationTimeout: "PT-06",
+	operationTimeout: "PT60.000S",
 }
 
 // Creates a new WinRM client
@@ -266,7 +267,6 @@ func (w *WinRMClient) openShell() (string, error) {
 
 // execute - Executes the given script on the target machine
 // Returns the command id of the newly created command
-// TODO: base64 encode the command
 func (w *WinRMClient) execute(shellId, command string) (string, error) {
 	p := &PayloadBuilder{
 		Url:              w.url,
@@ -342,7 +342,31 @@ func (w *WinRMClient) receive(shellId, commandId string) (string, int, error) {
 	}
 }
 
-// CloseShell - Closes the shell with the given id
+// input - Writes to the stdin of the winrm process
+func (w *WinRMClient) input(input, shellId, commandId string) error {
+	p := &PayloadBuilder{
+		Url:              w.url,
+		OperationTimeout: w.operationTimeout,
+		Locale:           w.locale,
+		MaxEnvelopeSize:  w.maxEnvelopeSize,
+		OpType:           Delete,
+		MessageId:        uuid.NewString(),
+		ShellId:          shellId,
+		CommandId:        commandId,
+		Input:            input,
+	}
+	payload, err := p.Execute()
+	if err != nil {
+		return err
+	}
+	_, err = w.sendRequest(payload)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// closeShell - Closes the shell with the given id
 func (w *WinRMClient) closeShell(shellId string) error {
 	p := &PayloadBuilder{
 		Url:              w.url,
