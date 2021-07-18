@@ -26,17 +26,6 @@ const (
 	Kerberos
 )
 
-type WinRMClientIf interface {
-	openShell() (string, error)
-	sendRequest(body *bytes.Buffer) (io.ReadCloser, error)
-	execute(shellId, command string) (string, error)
-	ExecuteCommand(cmd string) (string, int, error)
-	input(shellId, commandId string) error
-	receive(shellId, commandId string) (string, int, error)
-	closeShell(shellId string) error
-	validate() error
-}
-
 // WinRM client used for executing scripts
 // TODO: Add support for NTLM and Kerberos, Only basic is supported for now
 // TODO: Add support for certificate verification while initiating connections
@@ -197,32 +186,43 @@ func (w *WinRMClient) ExecuteCommand(cmd string) (string, int, error) {
 	defer w.closeShell(shellId)
 	eCmd := encodeCmd(cmd)
 	if len(eCmd) < 8000 {
-		commandId, err := w.execute(shellId, "powershell.exe -EncodedCommand "+eCmd)
-		if err != nil {
-			return "", 0, err
-		}
-		resp, exitCode, err := w.receive(shellId, commandId)
-		if err != nil {
-			return "", 0, err
-		}
-		return strings.TrimSpace(resp), exitCode, err
+		return w.executeSingleCmd(cmd, shellId)
 	} else {
-		tempFile := "$env:TEMP\\" + uuid.NewString() + ".ps1"
-		err = w.copyToFile(cmd, tempFile)
-		if err != nil {
-			return "", 0, err
-		}
-		commandId, err := w.execute(shellId, "powershell.exe -File "+eCmd)
-		if err != nil {
-			return "", 0, err
-		}
-		resp, exitCode, err := w.receive(shellId, commandId)
-		if err != nil {
-			return "", 0, err
-		}
-		return strings.TrimSpace(resp), exitCode, err
+		return w.executeScript(cmd, shellId)
 	}
+}
 
+// executeScript - copies the given script to a temporary location on the target machine
+// and passes it as input to the powershell.
+func (w *WinRMClient) executeScript(script, shellId string) (string, int, error) {
+	filename, err := w.copyToTempFile(shellId, script)
+	if err != nil {
+		return "", 0, err
+	}
+	defer w.executeSingleCmd("Remove-Item -Path '"+filename+"' -Force", shellId)
+	commandId, err := w.execute(shellId, "powershell.exe -File "+filename)
+	if err != nil {
+		return "", 0, err
+	}
+	resp, exitCode, err := w.receive(shellId, commandId)
+	if err != nil {
+		return "", 0, err
+	}
+	return strings.TrimSpace(resp), exitCode, err
+}
+
+// executeSingleCmd - Executes a single powershell command
+// It is assumed that the command line size for the command to be executed is below 8192
+func (w *WinRMClient) executeSingleCmd(cmd, shellId string) (string, int, error) {
+	commandId, err := w.execute(shellId, "powershell.exe -EncodedCommand "+encodeCmd(cmd))
+	if err != nil {
+		return "", 0, err
+	}
+	resp, exitCode, err := w.receive(shellId, commandId)
+	if err != nil {
+		return "", 0, err
+	}
+	return strings.TrimSpace(resp), exitCode, err
 }
 
 func encodeCmd(cmd string) string {
@@ -233,35 +233,42 @@ func encodeCmd(cmd string) string {
 	return base64.StdEncoding.EncodeToString([]byte(newCmd.String()))
 }
 
-// copyToFile copies the script to the given filename
-// filename should be that absolute path of the target file
-func (w *WinRMClient) copyToFile(script string, filename string) error {
+// copyToTempFile copies the script to a file in %temp% folder
+// and returns the absolute path to file
+func (w *WinRMClient) copyToTempFile(shellId, script string) (string, error) {
 	// Creating the file
-	resp, exitCode, err := w.ExecuteCommand(fmt.Sprintf("New-Item -Path '%s' -ItemType File", filename))
+	createFileScript := `
+	$path=$env:TEMP + '\%s'
+	New-Item -Path $path -ItemType File | Out-Null
+	echo $path
+	`
+	filename := uuid.NewString() + ".ps1"
+	resp, exitCode, err := w.executeSingleCmd(fmt.Sprintf(createFileScript, filename), shellId)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if exitCode != 0 {
-		return fmt.Errorf("copying script to file failed with exit code %d and response %s", exitCode, resp)
+		return "", errors.New(resp)
 	}
+	filename = resp
 	// TODO: Find adequate chunk size later
 	chunkSize := 10
 	i := 0
 	for i < len(script) {
 		if i+chunkSize < len(script) {
-			resp, exitCode, err = w.ExecuteCommand(fmt.Sprintf("echo %s >> %s", script[i:chunkSize+i+1], filename))
+			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("echo '%s' >> %s", script[i:chunkSize+i+1], filename), shellId)
 		} else {
-			resp, exitCode, err = w.ExecuteCommand(fmt.Sprintf("echo %s >> %s", script[i:], filename))
+			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("echo '%s' >> %s", script[i:], filename), shellId)
 		}
 		if err != nil {
-			return err
+			return "", err
 		}
 		if exitCode != 0 {
-			return fmt.Errorf("copying script to file failed with exit code %d and response %s", exitCode, resp)
+			return "", errors.New(resp)
 		}
 		i += chunkSize
 	}
-	return nil
+	return filename, nil
 }
 
 // sendRequest - sends a WinRM request to the provided url and SOAP payload
