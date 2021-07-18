@@ -147,11 +147,11 @@ func NewWinRMClient(details getEndpointDetails, options ...winrmSettingsOption) 
 		},
 	}
 	client.endpointDetails = details()
-	client.url = fmt.Sprintf("https://%s:%d/wsman", client.ipAddress, client.port)
 	client.winrmSettings = defaultWinrmSettings
 	for _, o := range options {
 		client.winrmSettings = o(client.winrmSettings)
 	}
+	client.url = fmt.Sprintf("https://%s:%d/wsman", client.ipAddress, client.port)
 	return client
 }
 
