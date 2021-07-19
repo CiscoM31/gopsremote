@@ -200,7 +200,7 @@ func (w *WinRMClient) executeScript(script, shellId string) (string, int, error)
 		return "", 0, err
 	}
 	defer w.executeSingleCmd("Remove-Item -Path '"+filename+"' -Force", shellId)
-	commandId, err := w.execute(shellId, "powershell.exe -File "+filename)
+	commandId, err := w.execute(shellId, "powershell.exe -f \""+filename+"\"")
 	if err != nil {
 		return "", 0, err
 	}
@@ -242,6 +242,22 @@ func (w *WinRMClient) copyToTempFile(shellId, script string) (string, error) {
 	New-Item -Path $path -ItemType File | Out-Null
 	echo $path
 	`
+	base64Decode := `
+	function Decode-Base64
+	{
+		[CmdletBinding()]
+		Param(
+			[Parameter(Mandatory=$true, ValueFromPipeline=$true)]
+			[string] $Line
+		)
+
+		Process
+		{
+			$bytes = [System.Convert]::FromBase64String($Line)
+			[System.Text.Encoding]::ASCII.GetString($bytes)
+		}
+	}
+	`
 	filename := uuid.NewString() + ".ps1"
 	resp, exitCode, err := w.executeSingleCmd(fmt.Sprintf(createFileScript, filename), shellId)
 	if err != nil {
@@ -252,13 +268,13 @@ func (w *WinRMClient) copyToTempFile(shellId, script string) (string, error) {
 	}
 	filename = resp
 	// TODO: Find adequate chunk size later
-	chunkSize := 10
+	chunkSize := 100
 	i := 0
 	for i < len(script) {
 		if i+chunkSize < len(script) {
-			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("echo '%s' >> %s", script[i:chunkSize+i+1], filename), shellId)
+			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append", base64Decode, base64.StdEncoding.EncodeToString([]byte(script[i:chunkSize+i+1])), filename), shellId)
 		} else {
-			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("echo '%s' >> %s", script[i:], filename), shellId)
+			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append", base64Decode, base64.StdEncoding.EncodeToString([]byte(script[i:])), filename), shellId)
 		}
 		if err != nil {
 			return "", err
