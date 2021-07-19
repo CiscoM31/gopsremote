@@ -370,6 +370,7 @@ func (w *WinRMClient) execute(shellId, command string) (string, error) {
 // to completion
 // TODO: Add timeout to this.
 func (w *WinRMClient) receive(shellId, commandId string) (string, int, error) {
+	stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 	for {
 		p := &PayloadBuilder{
 			Url:              w.url,
@@ -389,7 +390,6 @@ func (w *WinRMClient) receive(shellId, commandId string) (string, int, error) {
 		if err != nil {
 			return "", 0, err
 		}
-		stdout, stderr := &bytes.Buffer{}, &bytes.Buffer{}
 		exitCode, isComplete, err := CaptureStreams(body, stdout, stderr)
 		body.Close()
 		if err != nil {
