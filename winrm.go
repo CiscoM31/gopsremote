@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Azure/go-ntlmssp"
 	"github.com/google/uuid"
 )
 
@@ -123,7 +124,6 @@ func NewWinRMClient(details getEndpointDetails, options ...winrmSettingsOption) 
 					KeepAlive: 30 * time.Second,
 					DualStack: true,
 				}).DialContext,
-				ForceAttemptHTTP2:     true,
 				MaxIdleConns:          100,
 				IdleConnTimeout:       90 * time.Second,
 				TLSHandshakeTimeout:   10 * time.Second,
@@ -141,6 +141,9 @@ func NewWinRMClient(details getEndpointDetails, options ...winrmSettingsOption) 
 		client.winrmSettings = o(client.winrmSettings)
 	}
 	client.url = fmt.Sprintf("https://%s:%d/wsman", client.ipAddress, client.port)
+	if client.endpointDetails.auth&NTLM == NTLM {
+		client.client.Transport = ntlmssp.Negotiator{RoundTripper: client.client.Transport}
+	}
 	return client
 }
 
