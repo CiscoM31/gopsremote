@@ -106,6 +106,35 @@ func Locale(locale string) winrmSettingsOption {
 	}
 }
 
+func OperationTimeout(operationTimeout int) winrmSettingsOption {
+	return func(ws winrmSettings) winrmSettings {
+		ws.operationTimeout = convertToXsdDuration(operationTimeout)
+		return ws
+	}
+}
+
+// Converts the timeout in seconds to xsd duration format
+func convertToXsdDuration(timeout int) string {
+	// If not timeout is given default to 60s
+	if timeout == 0 {
+		timeout = 60
+	}
+	var hours, minutes, seconds int
+	hours, minutes = timeout / 3600, timeout % 3600
+	minutes, seconds = minutes / 60, minutes % 60
+	d := "PT"
+	if hours != 0 {
+		d += strconv.Itoa(hours) + "H"
+	}
+	if minutes != 0 {
+		d += strconv.Itoa(minutes) + "M"
+	}
+	if seconds != 0 {
+		d += strconv.Itoa(seconds) + "S"
+	}
+	return d
+}
+
 var defaultWinrmSettings winrmSettings = winrmSettings{
 	port:             5986,
 	maxEnvelopeSize:  "153200",
