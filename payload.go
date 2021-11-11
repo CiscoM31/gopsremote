@@ -146,10 +146,8 @@ var body = `
   </wsa:ReplyTo>
   <wsman:ResourceURI xmlns:wsman="http://schemas.dmtf.org/wbem/wsman/1/wsman.xsd">http://schemas.microsoft.com/wbem/wsman/1/windows/shell/cmd</wsman:ResourceURI>
   <wsa:Action s:mustUnderstand="true">{{.GetAction}}</wsa:Action>
-  <wsman:MaxEnvelopeSize s:mustUnderstand="true">{{.MaxEnvelopeSize}}</wsman:MaxEnvelopeSize>
   <wsa:MessageID>uuid:{{.MessageId}}</wsa:MessageID>
   <wsman:Locale xml:lang="{{.Locale}}" s:mustUnderstand="false"/>
-  <wsman:OperationTimeout>{{.OperationTimeout}}</wsman:OperationTimeout>
   {{.GenerateOptionSet}}
   {{.GenerateSelectorSet}}
 </s:Header>
