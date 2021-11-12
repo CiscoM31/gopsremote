@@ -52,6 +52,8 @@ type winrmSettings struct {
 	locale string
 	// operationTimeout of the WinRM operation
 	operationTimeout string
+	// Timeout of each HTTP call made
+	timeout int
 }
 
 type getEndpointDetails func() endpointDetails
@@ -84,6 +86,14 @@ type endpointDetails struct {
 }
 
 type winrmSettingsOption func(winrmSettings) winrmSettings
+
+func Timeout(timeout int) winrmSettingsOption {
+	return func(ws winrmSettings) winrmSettings {
+		ws.timeout = timeout
+		return ws
+	}
+}
+
 
 func Port(num int) winrmSettingsOption {
 	return func(ws winrmSettings) winrmSettings {
