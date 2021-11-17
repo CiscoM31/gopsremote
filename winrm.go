@@ -94,7 +94,6 @@ func Timeout(timeout int) winrmSettingsOption {
 	}
 }
 
-
 func Port(num int) winrmSettingsOption {
 	return func(ws winrmSettings) winrmSettings {
 		ws.port = num
@@ -130,8 +129,8 @@ func convertToXsdDuration(timeout int) string {
 		timeout = 60
 	}
 	var hours, minutes, seconds int
-	hours, minutes = timeout / 3600, timeout % 3600
-	minutes, seconds = minutes / 60, minutes % 60
+	hours, minutes = timeout/3600, timeout%3600
+	minutes, seconds = minutes/60, minutes%60
 	d := "PT"
 	if hours != 0 {
 		d += strconv.Itoa(hours) + "H"
@@ -300,7 +299,7 @@ func (w *WinRMClient) copyToTempFile(shellId, script string) (string, error) {
 		}
 	}
 	`
-	filename := uuid.NewString() + ".ps1"
+	filename := uuid.New().String() + ".ps1"
 	resp, exitCode, err := w.executeSingleCmd(fmt.Sprintf(createFileScript, filename), shellId)
 	if err != nil {
 		return "", err
@@ -361,7 +360,7 @@ func (w *WinRMClient) openShell() (string, error) {
 		Locale:           w.locale,
 		MaxEnvelopeSize:  w.maxEnvelopeSize,
 		OpType:           Create,
-		MessageId:        uuid.NewString(),
+		MessageId:        uuid.New().String(),
 	}
 	payload, err := p.Execute()
 	if err != nil {
@@ -388,7 +387,7 @@ func (w *WinRMClient) execute(shellId, command string) (string, error) {
 		Locale:           w.locale,
 		MaxEnvelopeSize:  w.maxEnvelopeSize,
 		OpType:           Execute,
-		MessageId:        uuid.NewString(),
+		MessageId:        uuid.New().String(),
 		ShellId:          shellId,
 		Command:          command,
 	}
@@ -420,7 +419,7 @@ func (w *WinRMClient) receive(shellId, commandId string) (string, int, error) {
 			Locale:           w.locale,
 			MaxEnvelopeSize:  w.maxEnvelopeSize,
 			OpType:           Receive,
-			MessageId:        uuid.NewString(),
+			MessageId:        uuid.New().String(),
 			ShellId:          shellId,
 			CommandId:        commandId,
 		}
@@ -464,7 +463,7 @@ func (w *WinRMClient) input(input, shellId, commandId string) error {
 		Locale:           w.locale,
 		MaxEnvelopeSize:  w.maxEnvelopeSize,
 		OpType:           Delete,
-		MessageId:        uuid.NewString(),
+		MessageId:        uuid.New().String(),
 		ShellId:          shellId,
 		CommandId:        commandId,
 		Input:            input,
@@ -488,7 +487,7 @@ func (w *WinRMClient) closeShell(shellId string) error {
 		Locale:           w.locale,
 		MaxEnvelopeSize:  w.maxEnvelopeSize,
 		OpType:           Delete,
-		MessageId:        uuid.NewString(),
+		MessageId:        uuid.New().String(),
 		ShellId:          shellId,
 	}
 	payload, err := p.Execute()
