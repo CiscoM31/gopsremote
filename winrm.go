@@ -2,6 +2,7 @@ package gopsremote
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/base64"
 	"errors"
@@ -83,6 +84,12 @@ type endpointDetails struct {
 	auth Authentication
 	// Proxy function
 	proxy func(*http.Request) (*url.URL, error)
+}
+
+type result struct {
+	err      error
+	exitCode int
+	response string
 }
 
 type winrmSettingsOption func(winrmSettings) winrmSettings
@@ -225,11 +232,33 @@ func (w *WinRMClient) ExecuteCommand(cmd string) (string, int, error) {
 		return "", 0, err
 	}
 	defer w.closeShell(shellId)
-	eCmd := encodeCmd(cmd)
-	if len(eCmd) < 8000 {
-		return w.executeSingleCmd(cmd, shellId)
-	} else {
-		return w.executeScript(cmd, shellId)
+	ctx := context.Background()
+	if w.timeout != 0 {
+		ctx, _ = context.WithTimeout(ctx, time.Second*time.Duration(w.timeout))
+	}
+	ch := make(chan result, 1)
+	go func() {
+		var response string
+		var exitCode int
+		var err error
+		eCmd := encodeCmd(cmd)
+		if len(eCmd) < 8000 {
+			response, exitCode, err = w.executeSingleCmd(cmd, shellId)
+		} else {
+			response, exitCode, err = w.executeScript(cmd, shellId)
+		}
+		ch <- result{
+			err:      err,
+			exitCode: exitCode,
+			response: response,
+		}
+	}()
+	select {
+	case <-ctx.Done():
+		// Time limit has expired, return timeout error
+		return "", -1, errors.New("timeout")
+	case r := <-ch:
+		return r.response, r.exitCode, r.err
 	}
 }
 
