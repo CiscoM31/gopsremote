@@ -27,6 +27,7 @@ const (
 	NTLM
 	Kerberos
 )
+const WINRM_HTTP_PORT = 5985
 
 // WinRM client used for executing scripts
 // TODO: Add support for NTLM and Kerberos, Only basic is supported for now
@@ -185,7 +186,11 @@ func NewWinRMClient(details getEndpointDetails, options ...winrmSettingsOption) 
 	for _, o := range options {
 		client.winrmSettings = o(client.winrmSettings)
 	}
-	client.url = fmt.Sprintf("https://%s:%d/wsman", client.ipAddress, client.port)
+	if client.port == WINRM_HTTP_PORT {
+		client.url = fmt.Sprintf("http://%s:%d/wsman", client.ipAddress, client.port)
+	} else {
+		client.url = fmt.Sprintf("https://%s:%d/wsman", client.ipAddress, client.port)
+	}
 	if client.endpointDetails.auth&NTLM == NTLM {
 		client.client.Transport = ntlmssp.Negotiator{RoundTripper: client.client.Transport}
 	}
