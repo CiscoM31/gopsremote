@@ -56,6 +56,8 @@ type winrmSettings struct {
 	operationTimeout string
 	// Timeout of each HTTP call made
 	timeout int
+	//Whether the call is http or https
+	isSecure bool
 }
 
 type getEndpointDetails func() endpointDetails
@@ -109,6 +111,13 @@ func Port(num int) winrmSettingsOption {
 	}
 }
 
+func IsSecure(b bool) winrmSettingsOption {
+	return func(ws winrmSettings) winrmSettings {
+		ws.isSecure = b
+		return ws
+	}
+}
+
 func MaxEnvelopeSize(size string) winrmSettingsOption {
 	return func(ws winrmSettings) winrmSettings {
 		ws.maxEnvelopeSize = size
@@ -157,6 +166,7 @@ var defaultWinrmSettings winrmSettings = winrmSettings{
 	maxEnvelopeSize:  "153200",
 	locale:           "en-US",
 	operationTimeout: "PT60.000S",
+	isSecure:         true,
 }
 
 // Creates a new WinRM client
@@ -186,10 +196,10 @@ func NewWinRMClient(details getEndpointDetails, options ...winrmSettingsOption) 
 	for _, o := range options {
 		client.winrmSettings = o(client.winrmSettings)
 	}
-	if client.port == WINRM_HTTP_PORT {
-		client.url = fmt.Sprintf("http://%s:%d/wsman", client.ipAddress, client.port)
-	} else {
+	if client.isSecure {
 		client.url = fmt.Sprintf("https://%s:%d/wsman", client.ipAddress, client.port)
+	} else {
+		client.url = fmt.Sprintf("http://%s:%d/wsman", client.ipAddress, client.port)
 	}
 	if client.endpointDetails.auth&NTLM == NTLM {
 		client.client.Transport = ntlmssp.Negotiator{RoundTripper: client.client.Transport}
