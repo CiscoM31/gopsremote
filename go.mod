@@ -1,5 +1,5 @@
-module github.com/bgollako/gopsremote
-//module github.com/aspiremore/gopsremote
+//module github.com/bgollako/gopsremote
+module github.com/aspiremore/gopsremote
 
 go 1.15
 
