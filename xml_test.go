@@ -65,3 +65,21 @@ func TestCaptureAttribute(t *testing.T) {
 		t.Error("invalid attribute")
 	}
 }
+
+func BenchmarkHTTPRequest(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		p := &gopsremote.PayloadBuilder{
+			OpType:           gopsremote.Execute,
+			Url:              "http://172.25.168.38:5986/wsman",
+			OperationTimeout: "PT.06",
+			Locale:           "en-US",
+			MessageId:        uuid.New().String(),
+			ShellId:          uuid.New().String(),
+			CommandId:        uuid.New().String(),
+			Command:          "Get-Service",
+			Input:            "del",
+			MaxEnvelopeSize:  "1532600",
+		}
+		p.Execute()
+	}
+}
