@@ -3,7 +3,7 @@ module github.com/bgollako/gopsremote
 go 1.15
 
 require (
-	github.com/Azure/go-ntlmssp v0.0.0-20200615164410-66371956d46c
-	github.com/google/uuid v1.2.0
-	golang.org/x/crypto v0.0.0-20210711020723-a769d52b0f97 // indirect
+	github.com/Azure/go-ntlmssp v0.0.0-20221128193559-754e69321358
+	github.com/google/uuid v1.3.0
+	golang.org/x/crypto v0.9.0 // indirect
 )
