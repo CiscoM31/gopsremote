@@ -269,7 +269,7 @@ func (w *WinRMClient) executeScript(script, shellId string) (string, int, error)
 	if err != nil {
 		return "", 0, err
 	}
-	//defer w.executeSingleCmd("Remove-Item -Path '"+filename+"' -Force", shellId)
+	defer w.executeSingleCmd("Remove-Item -Path '"+filename+"' -Force", shellId)
 	commandId, err := w.execute(shellId, "powershell.exe -f \""+filename+"\"")
 	if err != nil {
 		return "", 0, err
@@ -338,7 +338,6 @@ func (w *WinRMClient) copyToTempFile(shellId, script string) (string, error) {
 	}
 	filename = resp
 	scriptsArray := strings.Split(script, "\n")
-	i := 0
 	for _, scp := range scriptsArray {
 		if len(scp) < 500 {
 			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append", base64Decode, base64.StdEncoding.EncodeToString([]byte(scp)), filename), shellId)
@@ -363,7 +362,6 @@ func (w *WinRMClient) copyToTempFile(shellId, script string) (string, error) {
 		if exitCode != 0 {
 			return "", errors.New(resp)
 		}
-		i++
 	}
 	return filename, nil
 }
