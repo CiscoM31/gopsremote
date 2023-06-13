@@ -269,7 +269,7 @@ func (w *WinRMClient) executeScript(script, shellId string) (string, int, error)
 	if err != nil {
 		return "", 0, err
 	}
-	defer w.executeSingleCmd("Remove-Item -Path '"+filename+"' -Force", shellId)
+	//defer w.executeSingleCmd("Remove-Item -Path '"+filename+"' -Force", shellId)
 	commandId, err := w.execute(shellId, "powershell.exe -f \""+filename+"\"")
 	if err != nil {
 		return "", 0, err
