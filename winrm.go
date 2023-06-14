@@ -28,6 +28,11 @@ const (
 	Kerberos
 )
 
+const (
+	CHUNK           = 500
+	SCRIPTSEPARATOR = "\n"
+)
+
 // WinRM client used for executing scripts
 // TODO: Add support for NTLM and Kerberos, Only basic is supported for now
 // TODO: Add support for certificate verification while initiating connections
@@ -337,23 +342,22 @@ func (w *WinRMClient) copyToTempFile(shellId, script string) (string, error) {
 		return "", errors.New(resp)
 	}
 	filename = resp
-	scriptsArray := strings.Split(script, "\n")
+	scriptsArray := strings.Split(script, SCRIPTSEPARATOR)
 	for _, scp := range scriptsArray {
 		if len(scp) < 500 {
 			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append", base64Decode, base64.StdEncoding.EncodeToString([]byte(scp)), filename), shellId)
 		} else {
 			// Processing large script in chunks
-			chunk := 500
 			j := 0
 			for j < len(scp) {
-				if j+chunk < len(scp) {
+				if j+CHUNK < len(scp) {
 					// -NoNewline is used to keep the chunks in a single line
-					resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append -NoNewline", base64Decode, base64.StdEncoding.EncodeToString([]byte(scp[j:j+chunk])), filename), shellId)
+					resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append -NoNewline", base64Decode, base64.StdEncoding.EncodeToString([]byte(scp[j:j+CHUNK])), filename), shellId)
 				} else {
 					// For the last chunk of the script -NoNewline is avoided to keep the next script in a new line
 					resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append", base64Decode, base64.StdEncoding.EncodeToString([]byte(scp[j:])), filename), shellId)
 				}
-				j += chunk
+				j += CHUNK
 			}
 		}
 		if err != nil {
