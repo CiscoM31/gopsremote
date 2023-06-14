@@ -27,6 +27,10 @@ const (
 	NTLM
 	Kerberos
 )
+const (
+	HTTP_PROTOCOL = "http"
+	HTTPS_PROTOCOL = "https"
+)
 
 // WinRM client used for executing scripts
 // TODO: Add support for NTLM and Kerberos, Only basic is supported for now
@@ -55,6 +59,8 @@ type winrmSettings struct {
 	operationTimeout string
 	// Timeout of each HTTP call made
 	timeout int
+	// Whether the call is HTTP or HTTPS
+	isSecure bool
 }
 
 type getEndpointDetails func() endpointDetails
@@ -108,6 +114,13 @@ func Port(num int) winrmSettingsOption {
 	}
 }
 
+func IsSecure(b bool) winrmSettingsOption {
+	return func(ws winrmSettings) winrmSettings {
+		ws.isSecure = b
+		return ws
+	}
+}
+
 func MaxEnvelopeSize(size string) winrmSettingsOption {
 	return func(ws winrmSettings) winrmSettings {
 		ws.maxEnvelopeSize = size
@@ -156,6 +169,7 @@ var defaultWinrmSettings winrmSettings = winrmSettings{
 	maxEnvelopeSize:  "153200",
 	locale:           "en-US",
 	operationTimeout: "PT60.000S",
+	isSecure:         true,
 }
 
 // Creates a new WinRM client
@@ -185,7 +199,13 @@ func NewWinRMClient(details getEndpointDetails, options ...winrmSettingsOption) 
 	for _, o := range options {
 		client.winrmSettings = o(client.winrmSettings)
 	}
-	client.url = fmt.Sprintf("https://%s:%d/wsman", client.ipAddress, client.port)
+	var protocol string
+	if client.isSecure {
+		protocol = HTTPS_PROTOCOL
+	} else {
+		protocol = HTTP_PROTOCOL
+	}
+	client.url = fmt.Sprintf("%s://%s:%d/wsman", protocol, client.ipAddress, client.port)
 	if client.endpointDetails.auth&NTLM == NTLM {
 		client.client.Transport = ntlmssp.Negotiator{RoundTripper: client.client.Transport}
 	}
