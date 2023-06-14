@@ -337,14 +337,24 @@ func (w *WinRMClient) copyToTempFile(shellId, script string) (string, error) {
 		return "", errors.New(resp)
 	}
 	filename = resp
-	// TODO: Find adequate chunk size later
-	chunkSize := 100
-	i := 0
-	for i < len(script) {
-		if i+chunkSize < len(script) {
-			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append", base64Decode, base64.StdEncoding.EncodeToString([]byte(script[i:chunkSize+i+1])), filename), shellId)
+	scriptsArray := strings.Split(script, "\n")
+	for _, scp := range scriptsArray {
+		if len(scp) < 500 {
+			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append", base64Decode, base64.StdEncoding.EncodeToString([]byte(scp)), filename), shellId)
 		} else {
-			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append", base64Decode, base64.StdEncoding.EncodeToString([]byte(script[i:])), filename), shellId)
+			// Processing large script in chunks
+			chunk := 500
+			j := 0
+			for j < len(scp) {
+				if j+chunk < len(scp) {
+					// -NoNewline is used to keep the chunks in a single line
+					resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append -NoNewline", base64Decode, base64.StdEncoding.EncodeToString([]byte(scp[j:j+chunk])), filename), shellId)
+				} else {
+					// For the last chunk of the script -NoNewline is avoided to keep the next script in a new line
+					resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append", base64Decode, base64.StdEncoding.EncodeToString([]byte(scp[j:])), filename), shellId)
+				}
+				j += chunk
+			}
 		}
 		if err != nil {
 			return "", err
@@ -352,7 +362,6 @@ func (w *WinRMClient) copyToTempFile(shellId, script string) (string, error) {
 		if exitCode != 0 {
 			return "", errors.New(resp)
 		}
-		i += chunkSize
 	}
 	return filename, nil
 }
