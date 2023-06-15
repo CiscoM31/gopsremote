@@ -30,7 +30,7 @@ const (
 
 const (
 	WINRM_HTTP_PORT = 5985
-	CHUNK           = 500
+	CHUNK           = 512
 	SCRIPTSEPARATOR = "\n"
 )
 
@@ -359,7 +359,7 @@ func (w *WinRMClient) copyToTempFile(shellId, script string) (string, error) {
 	filename = resp
 	scriptsArray := strings.Split(script, SCRIPTSEPARATOR)
 	for _, scp := range scriptsArray {
-		if len(scp) < 500 {
+		if len(scp) < CHUNK {
 			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append", base64Decode, base64.StdEncoding.EncodeToString([]byte(scp)), filename), shellId)
 		} else {
 			// Processing large script in chunks
