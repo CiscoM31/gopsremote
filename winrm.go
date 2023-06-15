@@ -359,6 +359,7 @@ func (w *WinRMClient) copyToTempFile(shellId, script string) (string, error) {
 	filename = resp
 	scriptsArray := strings.Split(script, SCRIPTSEPARATOR)
 	for _, scp := range scriptsArray {
+		scp = strings.TrimSpace(scp)
 		if len(scp) == 0 {
 			continue
 		}
