@@ -359,10 +359,14 @@ func (w *WinRMClient) copyToTempFile(shellId, script string) (string, error) {
 	filename = resp
 	scriptsArray := strings.Split(script, SCRIPTSEPARATOR)
 	for _, scp := range scriptsArray {
+		scp = strings.TrimSpace(scp)
+		if len(scp) == 0 {
+			continue
+		}
 		if len(scp) < CHUNK {
 			resp, exitCode, err = w.executeSingleCmd(fmt.Sprintf("%s\necho '%s' | Decode-Base64 | Out-File -FilePath %s -Append", base64Decode, base64.StdEncoding.EncodeToString([]byte(scp)), filename), shellId)
 		} else {
-			// Processing large script in chunks
+			// Approximately 2600 bytes can be decoded at a time, hence we are processing the script in chunks
 			j := 0
 			for j < len(scp) {
 				if j+CHUNK < len(scp) {
