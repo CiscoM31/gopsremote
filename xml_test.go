@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/bgollako/gopsremote"
+	"github.com/CiscoM31/gopsremote"
 	"github.com/google/uuid"
 )
 

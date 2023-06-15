@@ -1,4 +1,4 @@
-module github.com/bgollako/gopsremote
+module github.com/CiscoM31/gopsremote
 
 go 1.15
 
