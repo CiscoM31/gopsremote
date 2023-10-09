@@ -194,6 +194,9 @@ func NewWinRMClient(details getEndpointDetails, options ...winrmSettingsOption) 
 					InsecureSkipVerify: true,
 				},
 			},
+			CheckRedirect: func(req *http.Request, via []*http.Request) error {
+				return errors.New("HTTP request redirect is not allowed")
+			},
 		},
 	}
 	client.endpointDetails = details()
